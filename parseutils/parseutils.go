@@ -28,11 +28,11 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/protobuf/proto"
 	"github.com/google/battery-historian/checkinparse"
 	"github.com/google/battery-historian/csv"
 	"github.com/google/battery-historian/historianutils"
 	"github.com/google/battery-historian/packageutils"
+	"google.golang.org/protobuf/proto"
 
 	usagepb "github.com/google/battery-historian/pb/usagestats_proto"
 )
@@ -132,6 +132,22 @@ var (
 		"3": "good",
 		"4": "great",
 	}
+
+	// InlineServiceUIDRE matches inline service UID format: u0aXXX:"service_name" or uXXXX:"service_name"
+	// This format is used in modern Android versions where the UID and service name are embedded
+	// directly in the history event instead of using a string pool index.
+	// Examples:
+	//   u0a123:"#MyWorker#@androidx.work.impl@com.example.myapp/..."
+	//   u0a456:"abc123 com.example.app.MyService.WAKE_THREAD.0/u0"
+	InlineServiceUIDRE = regexp.MustCompile(`^(u\d+a?\d*):"(.+)"$`)
+
+	// InlineWakeReasonRE matches inline wake reason format: N:"reason_string" or -N:"reason_string"
+	// This format is used for wake reasons and wakelocks in modern Android versions.
+	// Examples:
+	//   0:"1236 dhdpcie_host_wake"
+	//   0:"Abort: Pending Wakeup Sources: wlan_rx_wake"
+	//   -1:"screen"
+	InlineWakeReasonRE = regexp.MustCompile(`^(-?\d+):"(.+)"$`)
 )
 
 // ServiceUID contains the identifying service for battery operations.
@@ -140,6 +156,88 @@ type ServiceUID struct {
 	// We are treating UIDs as strings.
 	Service, UID string
 	Pkg          *usagepb.PackageInfo
+}
+
+// parseInlineServiceUID attempts to parse an inline service UID from a value string.
+// Modern Android versions may embed the UID and service name directly in the history event
+// instead of using a string pool index.
+// Returns the ServiceUID and true if successful, or an empty ServiceUID and false otherwise.
+func parseInlineServiceUID(value string) (ServiceUID, bool) {
+	// First try the inline service UID format: u0aXXX:"service" or uXXXX:"service"
+	matches := InlineServiceUIDRE.FindStringSubmatch(value)
+	if len(matches) == 3 {
+		uid := matches[1]
+		service := matches[2]
+		// Convert u0aXXX format to numeric UID format (e.g., "u0a242" -> "10242")
+		numericUID := uid
+		if strings.HasPrefix(uid, "u0a") {
+			// u0aXXX format - user 0, app ID XXX
+			// The actual UID is 10000 + app ID for user 0
+			appIDStr := strings.TrimPrefix(uid, "u0a")
+			if appID, err := strconv.Atoi(appIDStr); err == nil {
+				numericUID = strconv.Itoa(10000 + appID)
+			}
+		} else if strings.HasPrefix(uid, "u") {
+			// uXXXX format - direct UID
+			numericUID = strings.TrimPrefix(uid, "u")
+		}
+		return ServiceUID{
+			Service: fmt.Sprintf("%q", service), // Keep the service name quoted for consistency
+			UID:     numericUID,
+		}, true
+	}
+
+	// Try the inline wake reason format: N:"reason_string"
+	matches = InlineWakeReasonRE.FindStringSubmatch(value)
+	if len(matches) == 3 {
+		uid := matches[1]
+		service := matches[2]
+		return ServiceUID{
+			Service: fmt.Sprintf("%q", service), // Keep the service name quoted for consistency
+			UID:     uid,
+		}, true
+	}
+
+	return ServiceUID{}, false
+}
+
+// getServiceUID looks up a service UID from the idxMap, falling back to inline parsing
+// if the value is not found in the map. This handles both legacy string pool indices
+// and modern inline service UID formats.
+func getServiceUID(idxMap map[string]ServiceUID, value string) (ServiceUID, bool) {
+	// First try to look up in the idxMap (legacy format)
+	if suid, ok := idxMap[value]; ok {
+		return suid, true
+	}
+	// Try parsing as inline service UID (modern format)
+	return parseInlineServiceUID(value)
+}
+
+// splitHistoryLine splits a battery history line by commas while respecting quoted strings.
+// This is necessary because quoted service names can contain commas.
+// Example: 9,h,122,+Etw=u0a244:"service,with,commas" should split correctly.
+func splitHistoryLine(line string) []string {
+	var parts []string
+	var current strings.Builder
+	inQuotes := false
+
+	for i := 0; i < len(line); i++ {
+		c := line[i]
+		if c == '"' {
+			inQuotes = !inQuotes
+			current.WriteByte(c)
+		} else if c == ',' && !inQuotes {
+			parts = append(parts, current.String())
+			current.Reset()
+		} else {
+			current.WriteByte(c)
+		}
+	}
+	// Don't forget the last part
+	if current.Len() > 0 {
+		parts = append(parts, current.String())
+	}
+	return parts
 }
 
 // Dist is a distribution summary for a battery metric.
@@ -1834,7 +1932,7 @@ func updateState(b io.Writer, csvState *csv.State, state *DeviceState, summary *
 		// Special case as there are no transitions for this.
 		// Just the wake reason that also arrives asynchronously
 		// WakeupReason, WakeupReasonSummary
-		serviceUID, ok := idxMap[value]
+		serviceUID, ok := getServiceUID(idxMap, value)
 		if !ok {
 			return state, summary, fmt.Errorf("unable to find index %q in idxMap for wakelock", value)
 		}
@@ -1948,7 +2046,7 @@ func updateState(b io.Writer, csvState *csv.State, state *DeviceState, summary *
 					return state, summary, errors.New("got w state in the middle of the summary")
 				}
 			} else {
-				serviceUID, ok := idxMap[value]
+				serviceUID, ok := getServiceUID(idxMap, value)
 				if !ok {
 					return state, summary, fmt.Errorf("wakelock held by unknown service : %q", value)
 				}
@@ -2001,7 +2099,7 @@ func updateState(b io.Writer, csvState *csv.State, state *DeviceState, summary *
 			return state, summary, errors.New("encountered multiple Esw events between a single pair of +S/-S events")
 		}
 
-		suid, ok := idxMap[value]
+		suid, ok := getServiceUID(idxMap, value)
 		if !ok {
 			return state, summary, fmt.Errorf("screen turned on by unknown process: %q", value)
 		}
@@ -2108,7 +2206,7 @@ func updateState(b io.Writer, csvState *csv.State, state *DeviceState, summary *
 		return state, summary, errors.New("sample: Null Event line = " + tr + key + value)
 
 	case "Epr": // proc
-		serviceUID, ok := idxMap[value]
+		serviceUID, ok := getServiceUID(idxMap, value)
 		if !ok {
 			return state, summary, fmt.Errorf("unable to find index %q in idxMap for active process", value)
 		}
@@ -2117,7 +2215,7 @@ func updateState(b io.Writer, csvState *csv.State, state *DeviceState, summary *
 			summary.ActiveProcessSummary, tr, value, "Active process", csvState)
 
 	case "Efg": // fg
-		serviceUID, ok := idxMap[value]
+		serviceUID, ok := getServiceUID(idxMap, value)
 		if !ok {
 			return state, summary, fmt.Errorf("unable to find index %q in idxMap for foreground process", value)
 		}
@@ -2126,7 +2224,7 @@ func updateState(b io.Writer, csvState *csv.State, state *DeviceState, summary *
 			summary.ForegroundProcessSummary, tr, value, Foreground, csvState)
 
 	case "Etp": // top
-		serviceUID, ok := idxMap[value]
+		serviceUID, ok := getServiceUID(idxMap, value)
 		if !ok {
 			return state, summary, fmt.Errorf("unable to find index %q in idxMap for top app", value)
 		}
@@ -2135,7 +2233,7 @@ func updateState(b io.Writer, csvState *csv.State, state *DeviceState, summary *
 			summary.TopApplicationSummary, tr, value, Top, csvState)
 
 	case "Esy": // sync
-		serviceUID, ok := idxMap[value]
+		serviceUID, ok := getServiceUID(idxMap, value)
 		if !ok {
 			return state, summary, fmt.Errorf("unable to find index %q in idxMap sync app", value)
 		}
@@ -2223,7 +2321,7 @@ func updateState(b io.Writer, csvState *csv.State, state *DeviceState, summary *
 			// Empty connectivity change - skip
 			return state, summary, nil
 		}
-		suid := idxMap[value]
+		suid, _ := getServiceUID(idxMap, value)
 		t, ok := connConstants[suid.UID]
 		if !ok {
 			t = "UNKNOWN"
@@ -2367,7 +2465,7 @@ func updateState(b io.Writer, csvState *csv.State, state *DeviceState, summary *
 		csvState.AddEntry("Network connectivity", su, state.CurrentTime)
 
 	case "Ewl": // wakelock_in
-		serviceUID, ok := idxMap[value]
+		serviceUID, ok := getServiceUID(idxMap, value)
 		if !ok {
 			return state, summary, fmt.Errorf("unable to find index %q in idxMap for wakelock_in", value)
 		}
@@ -2424,7 +2522,7 @@ func updateState(b io.Writer, csvState *csv.State, state *DeviceState, summary *
 		return state, summary, err
 
 	case "Ejb": // job: an application executing a scheduled job
-		serviceUID, ok := idxMap[value]
+		serviceUID, ok := getServiceUID(idxMap, value)
 		if !ok {
 			return state, summary, fmt.Errorf("unable to find index %q in idxMap for job", value)
 		}
@@ -2433,7 +2531,7 @@ func updateState(b io.Writer, csvState *csv.State, state *DeviceState, summary *
 			summary.ScheduledJobSummary, tr, value, "JobScheduler", csvState)
 
 	case "Elw": // longwake: long-held wakelocks
-		serviceUID, ok := idxMap[value]
+		serviceUID, ok := getServiceUID(idxMap, value)
 		if !ok {
 			return state, summary, fmt.Errorf("unable to find index %q in idxMap for longwake", value)
 		}
@@ -2448,7 +2546,7 @@ func updateState(b io.Writer, csvState *csv.State, state *DeviceState, summary *
 
 	case "Etw": // tmpwhitelist: an application on the temporary whitelist
 		// Etw events log apps going on/off the temporary whitelist, for example when GCM delivers a high priority message to the app and temporarily whitelists it for network access
-		serviceUID, ok := idxMap[value]
+		serviceUID, ok := getServiceUID(idxMap, value)
 		if !ok {
 			return state, summary, fmt.Errorf("unable to find index %q in idxMap for tmpwhitelist", value)
 		}
@@ -2531,7 +2629,7 @@ func updateState(b io.Writer, csvState *csv.State, state *DeviceState, summary *
 	case "Eal": // alarm
 		// "Eal" is an alarm going off event. These are all from alarms scheduled by apps with the AlarmManager.
 		// These events aren't generated unless you explicitly enable them for debugging purposes.
-		suid, ok := idxMap[value]
+		suid, ok := getServiceUID(idxMap, value)
 		if !ok {
 			return state, summary, fmt.Errorf("unable to find index %q in idxMap for Alarm going off (Eal)", value)
 		}
@@ -2548,7 +2646,7 @@ func updateState(b io.Writer, csvState *csv.State, state *DeviceState, summary *
 		// 9,h,55,-r,-Wr,wr=32,Est=31
 		// We will not add them to historian v2 because they are only for debugging and too rarely to be used,
 		// and it doesn't make sense to display them as summary table.
-		if _, ok := idxMap[value]; !ok {
+		if _, ok := getServiceUID(idxMap, value); !ok {
 			return state, summary, fmt.Errorf("unable to find index %q in idxMap for collect external stats event (Est)", value)
 		}
 		return state, summary, nil
@@ -2807,7 +2905,7 @@ func updateState(b io.Writer, csvState *csv.State, state *DeviceState, summary *
 
 // addCSVInstantAppEvent adds an instantaneous app event to the csv log.
 func addCSVInstantAppEvent(csv *csv.State, state *DeviceState, idxMap map[string]ServiceUID, eventName, value string) error {
-	suid, ok := idxMap[value]
+	suid, ok := getServiceUID(idxMap, value)
 	if !ok {
 		return fmt.Errorf("unable to find index %q in idxMap for %q", value, eventName)
 	}
@@ -2953,7 +3051,8 @@ func analyzeData(b io.Writer, csv *csv.State, state *DeviceState, summary *Activ
 		return state, summary, nil
 	}
 
-	parts := strings.Split(line, ",")
+	// Use quote-aware splitting to handle quoted strings containing commas
+	parts := splitHistoryLine(line)
 	if len(parts) < 3 {
 		return state, summary, errors.New("unknown format: " + line)
 	}
@@ -2977,6 +3076,13 @@ func analyzeData(b io.Writer, csv *csv.State, state *DeviceState, summary *Activ
 				if result["key"] == "state_1" {
 					// DataRE doesn't get the rest of the output because it doesn't expect spaces.
 					v = part
+				} else if strings.Contains(part, `"`) && !strings.HasSuffix(v, `"`) {
+					// If the part contains quotes but the captured value doesn't end with a quote,
+					// it means DataRE truncated a quoted string containing spaces.
+					// Extract the full value including the quoted portion.
+					if idx := strings.Index(part, "="); idx != -1 {
+						v = part[idx+1:]
+					}
 				}
 				state, summary, err = updateState(b, csv, state, summary, summaries, idxMap, pum, timeDelta,
 					result["transition"], result["key"], v)

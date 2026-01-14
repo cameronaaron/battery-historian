@@ -25,8 +25,8 @@ import (
 	"testing"
 	"time"
 
-	"google.golang.org/protobuf/proto"
 	"github.com/google/battery-historian/csv"
+	"google.golang.org/protobuf/proto"
 
 	usagepb "github.com/google/battery-historian/pb/usagestats_proto"
 )
@@ -6037,5 +6037,113 @@ func TestOverflow(t *testing.T) {
 	want := normalizeCSV(wantCSV)
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("AnalyzeHistory(%v) generated incorrect csv:\n  got: %q\n  want: %q", input, got, want)
+	}
+}
+
+// TestInlineServiceUIDParsing tests the parsing of inline service UIDs in modern Android formats.
+func TestInlineServiceUIDParsing(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantUID string
+		wantSvc string
+		wantOK  bool
+	}{
+		{
+			name:    "u0a format with spaces in service name",
+			input:   `u0a123:"abc123 com.example.app.MyService.WAKE_THREAD.0/u0"`,
+			wantUID: "10123",
+			wantSvc: `"abc123 com.example.app.MyService.WAKE_THREAD.0/u0"`,
+			wantOK:  true,
+		},
+		{
+			name:    "u0a format without spaces",
+			input:   `u0a456:"#MyWorker#@androidx.work.impl@com.example.myapp"`,
+			wantUID: "10456",
+			wantSvc: `"#MyWorker#@androidx.work.impl@com.example.myapp"`,
+			wantOK:  true,
+		},
+		{
+			name:    "wake reason format with positive UID",
+			input:   `0:"1236 dhdpcie_host_wake"`,
+			wantUID: "0",
+			wantSvc: `"1236 dhdpcie_host_wake"`,
+			wantOK:  true,
+		},
+		{
+			name:    "wake reason format with negative UID",
+			input:   `-1:"screen"`,
+			wantUID: "-1",
+			wantSvc: `"screen"`,
+			wantOK:  true,
+		},
+		{
+			name:   "index format (should not match inline)",
+			input:  "123",
+			wantOK: false,
+		},
+		{
+			name:   "invalid format",
+			input:  "invalid",
+			wantOK: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			suid, ok := parseInlineServiceUID(tt.input)
+			if ok != tt.wantOK {
+				t.Errorf("parseInlineServiceUID(%q) returned ok=%v, want %v", tt.input, ok, tt.wantOK)
+				return
+			}
+			if !ok {
+				return
+			}
+			if suid.UID != tt.wantUID {
+				t.Errorf("parseInlineServiceUID(%q).UID = %q, want %q", tt.input, suid.UID, tt.wantUID)
+			}
+			if suid.Service != tt.wantSvc {
+				t.Errorf("parseInlineServiceUID(%q).Service = %q, want %q", tt.input, suid.Service, tt.wantSvc)
+			}
+		})
+	}
+}
+
+// TestSplitHistoryLine tests the quote-aware splitting of history lines.
+func TestSplitHistoryLine(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  []string
+	}{
+		{
+			name:  "simple line without quotes",
+			input: "9,h,122,+Ejb=19",
+			want:  []string{"9", "h", "122", "+Ejb=19"},
+		},
+		{
+			name:  "line with quoted string no internal commas",
+			input: `9,h,122,+Etw=u0a244:"service name"`,
+			want:  []string{"9", "h", "122", `+Etw=u0a244:"service name"`},
+		},
+		{
+			name:  "line with quoted string containing commas",
+			input: `9,h,122,+Etw=u0a180:"setPendingIntentAllowlistDuration,reason:NotificationManagerService,pendingintent:u0a158:com.example"`,
+			want:  []string{"9", "h", "122", `+Etw=u0a180:"setPendingIntentAllowlistDuration,reason:NotificationManagerService,pendingintent:u0a158:com.example"`},
+		},
+		{
+			name:  "multiple events with quoted strings",
+			input: `9,h,122,-Chtp,+Ejb=u0a242:"job name"`,
+			want:  []string{"9", "h", "122", "-Chtp", `+Ejb=u0a242:"job name"`},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := splitHistoryLine(tt.input)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("splitHistoryLine(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
 	}
 }

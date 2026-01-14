@@ -1,0 +1,32 @@
+# Bugreports and sensitive data - NEVER commit these
+*.zip
+*.txt.gz
+bugreport-*.txt
+bugreport-*.zip
+*.bugreport
+
+# Temporary test files
+/tmp/
+*.tmp
+*.temp
+
+# Build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Go build cache
+/vendor/
+*.test
