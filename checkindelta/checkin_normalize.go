@@ -20,7 +20,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 	"github.com/google/battery-historian/checkinparse"
 	bspb "github.com/google/battery-historian/pb/batterystats_proto"
 )

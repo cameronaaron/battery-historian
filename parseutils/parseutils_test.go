@@ -18,14 +18,14 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"reflect"
 	"sort"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 	"github.com/google/battery-historian/csv"
 
 	usagepb "github.com/google/battery-historian/pb/usagestats_proto"
@@ -313,7 +313,7 @@ func TestAnalyzeOverTimeJump(t *testing.T) {
 		MaxDuration:   275 * time.Millisecond,
 	}
 
-	result := AnalyzeHistory(ioutil.Discard, input, FormatBatteryLevel, emptyUIDPackageMapping, true)
+	result := AnalyzeHistory(io.Discard, input, FormatBatteryLevel, emptyUIDPackageMapping, true)
 	validateHistory(input, t, result, 0, 1)
 
 	s := result.Summaries[0]
@@ -474,9 +474,9 @@ func TestShutdownWithTimeJump(t *testing.T) {
 		errors.New("** Error in 9,h,5571,Bl=58,Bs=d,Bh=g,Bp=n,Bt=227,Bv=3803,+r with +r : consecutive +r events"),
 	}
 
-	resultTotalTime := AnalyzeHistory(ioutil.Discard, input, FormatTotalTime, emptyUIDPackageMapping, true)
+	resultTotalTime := AnalyzeHistory(io.Discard, input, FormatTotalTime, emptyUIDPackageMapping, true)
 
-	resultBatteryLevel := AnalyzeHistory(ioutil.Discard, input, FormatBatteryLevel, emptyUIDPackageMapping, true)
+	resultBatteryLevel := AnalyzeHistory(io.Discard, input, FormatBatteryLevel, emptyUIDPackageMapping, true)
 
 	if !reflect.DeepEqual(wantErrs, resultTotalTime.Errs) {
 		t.Errorf("AnalyzeHistory(%s,FormatTotalTime,...)\n errs: %v\n want: %v", input, resultTotalTime.Errs, wantErrs)
@@ -583,7 +583,7 @@ func TestPerAppSyncSummary(t *testing.T) {
 		MaxDuration:   4847 * time.Millisecond,
 	}
 
-	result := AnalyzeHistory(ioutil.Discard, input, FormatBatteryLevel, emptyUIDPackageMapping, true)
+	result := AnalyzeHistory(io.Discard, input, FormatBatteryLevel, emptyUIDPackageMapping, true)
 	validateHistory(input, t, result, 0, 1)
 
 	s := result.Summaries[0]
@@ -800,7 +800,7 @@ func TestTotalSyncTime(t *testing.T) {
 		MaxDuration:   10255 * time.Millisecond,
 	}
 
-	result := AnalyzeHistory(ioutil.Discard, input, FormatTotalTime, emptyUIDPackageMapping, true)
+	result := AnalyzeHistory(io.Discard, input, FormatTotalTime, emptyUIDPackageMapping, true)
 	validateHistory(input, t, result, 0, 1)
 	s := result.Summaries[0]
 
@@ -834,7 +834,7 @@ func TestInProgressEvents(t *testing.T) {
 		MaxDuration:   9876 * time.Millisecond,
 	}
 
-	result := AnalyzeHistory(ioutil.Discard, input, FormatTotalTime, emptyUIDPackageMapping, true)
+	result := AnalyzeHistory(io.Discard, input, FormatTotalTime, emptyUIDPackageMapping, true)
 	validateHistory(input, t, result, 0, 1)
 	s := result.Summaries[0]
 
@@ -865,7 +865,7 @@ func TestTwoServiceUIDNegativeEvents(t *testing.T) {
 		fmt.Errorf(`** Error in 9,h,4321,-Esy=0 with -Esy=0 : two negative transitions for "SyncManager":"-"`),
 	}
 
-	result := AnalyzeHistory(ioutil.Discard, input, FormatTotalTime, emptyUIDPackageMapping, true)
+	result := AnalyzeHistory(io.Discard, input, FormatTotalTime, emptyUIDPackageMapping, true)
 	validateHistory(input, t, result, 1, 1)
 
 	if !reflect.DeepEqual(want, result.Errs) {
@@ -889,7 +889,7 @@ func TestTwoBooleanNegativeEvents(t *testing.T) {
 		fmt.Errorf(`** Error in 9,h,4000,-S with -S : two negative transitions for "Screen":"-"`),
 	}
 
-	result := AnalyzeHistory(ioutil.Discard, input, FormatTotalTime, emptyUIDPackageMapping, true)
+	result := AnalyzeHistory(io.Discard, input, FormatTotalTime, emptyUIDPackageMapping, true)
 	validateHistory(input, t, result, 1, 1)
 
 	if !reflect.DeepEqual(want, result.Errs) {
@@ -913,7 +913,7 @@ func TestScrubPII(t *testing.T) {
 	}
 
 	for doScrub, expectedAddress := range want {
-		result := AnalyzeHistory(ioutil.Discard, input, FormatTotalTime, emptyUIDPackageMapping, doScrub)
+		result := AnalyzeHistory(io.Discard, input, FormatTotalTime, emptyUIDPackageMapping, doScrub)
 		validateHistory(input, t, result, 0, 1)
 
 		s := result.Summaries[0]
@@ -1032,7 +1032,7 @@ func TestWakeLockInParse(t *testing.T) {
 		MaxDuration:   8000 * time.Millisecond,
 	}
 
-	result := AnalyzeHistory(ioutil.Discard, input, FormatTotalTime, emptyUIDPackageMapping, true)
+	result := AnalyzeHistory(io.Discard, input, FormatTotalTime, emptyUIDPackageMapping, true)
 
 	if len(result.Errs) > 0 {
 		t.Errorf("Errors encountered while analyzing history: %v", result.Errs)
@@ -1704,7 +1704,7 @@ func TestEjbParsing(t *testing.T) {
 		MaxDuration:   2000 * time.Millisecond,
 	}
 
-	result := AnalyzeHistory(ioutil.Discard, input, FormatTotalTime, emptyUIDPackageMapping, true)
+	result := AnalyzeHistory(io.Discard, input, FormatTotalTime, emptyUIDPackageMapping, true)
 	validateHistory(input, t, result, 0, 1)
 	s := result.Summaries[0]
 
@@ -2057,7 +2057,7 @@ func TestEtwParsing(t *testing.T) {
 		},
 	}
 
-	result := AnalyzeHistory(ioutil.Discard, input, FormatTotalTime, emptyUIDPackageMapping, true)
+	result := AnalyzeHistory(io.Discard, input, FormatTotalTime, emptyUIDPackageMapping, true)
 	validateHistory(input, t, result, 0, 1)
 	if len(result.Summaries) == 1 {
 		s := result.Summaries[0]
@@ -2913,7 +2913,7 @@ func TestServicePackageMatching(t *testing.T) {
 		if len(errs) > 0 {
 			t.Errorf("%v: UIDAndPackageMatching(%v, %v) generated unexpected errors:\n  %v", test.desc, test.inputCheckin, test.pkgList, errs)
 		}
-		result := AnalyzeHistory(ioutil.Discard, test.inputHistory, FormatTotalTime, upm, true)
+		result := AnalyzeHistory(io.Discard, test.inputHistory, FormatTotalTime, upm, true)
 		validateHistory(test.inputHistory, t, result, 0, 1)
 		if len(result.Errs) > 0 {
 			t.Errorf("%v: AnalyzeHistory(%v, %v) generated unexpected errors:\n  %v", test.desc, test.inputHistory, upm, result.Errs)
@@ -2942,7 +2942,7 @@ func TestInstantAppEventParsing(t *testing.T) {
 				`9,hsp,4,10139,"com.google.android.apps.interactiveevents"`,
 				`9,hsp,6,1234,"com.google.android.apps.chromecast.app"`, // The "UID" section for Epi is actually just the version code of the app.
 				`9,hsp,7,81,"com.google.android.apps.blogger"`,          // The "UID" section for Epu is actually just the version code of the app.
-				`9,hsp,8,10070,""`,                                      // The log won't include the application name, just the UID.
+				`9,hsp,8,10070,""`, // The log won't include the application name, just the UID.
 				`9,h,0:RESET:TIME:1432964300000`,
 				`9,h,1000,Eaa=3`,
 				`9,h,2000,Eai=4`,
@@ -3038,7 +3038,7 @@ func TestFixDurationInTotalTime(t *testing.T) {
 		},
 	}
 
-	result := AnalyzeHistory(ioutil.Discard, input, FormatTotalTime, emptyUIDPackageMapping, true)
+	result := AnalyzeHistory(io.Discard, input, FormatTotalTime, emptyUIDPackageMapping, true)
 	validateHistory(input, t, result, 0, 1)
 	s := result.Summaries[0]
 
@@ -3220,7 +3220,7 @@ func TestFixDurationInBatteryLevel(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		result := AnalyzeHistory(ioutil.Discard, test.input, FormatBatteryLevel, emptyUIDPackageMapping, true)
+		result := AnalyzeHistory(io.Discard, test.input, FormatBatteryLevel, emptyUIDPackageMapping, true)
 		validateHistory(test.input, t, result, 0, len(test.wantSummary))
 
 		if len(result.Summaries) == len(test.wantSummary) {
@@ -3307,7 +3307,7 @@ func TestPhoneParsing(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		result := AnalyzeHistory(ioutil.Discard, test.input, FormatTotalTime, emptyUIDPackageMapping, true)
+		result := AnalyzeHistory(io.Discard, test.input, FormatTotalTime, emptyUIDPackageMapping, true)
 		validateHistory(test.input, t, result, 0, 1)
 
 		if len(result.Summaries) == 1 {
@@ -3378,7 +3378,7 @@ func TestWifiParsing(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		result := AnalyzeHistory(ioutil.Discard, test.input, FormatTotalTime, emptyUIDPackageMapping, true)
+		result := AnalyzeHistory(io.Discard, test.input, FormatTotalTime, emptyUIDPackageMapping, true)
 		validateHistory(test.input, t, result, 0, 1)
 
 		if len(result.Summaries) == 1 {
@@ -3468,7 +3468,7 @@ func TestEstParse(t *testing.T) {
 		fmt.Errorf(`** Error in 9,h,44377,Est=31 with Est=31 : unable to find index "31" in idxMap for collect external stats event (Est)`),
 	}
 
-	result := AnalyzeHistory(ioutil.Discard, input, FormatTotalTime, emptyUIDPackageMapping, true)
+	result := AnalyzeHistory(io.Discard, input, FormatTotalTime, emptyUIDPackageMapping, true)
 	validateHistory(input, t, result, 1, 1)
 
 	if !reflect.DeepEqual(want, result.Errs) {
@@ -5206,7 +5206,7 @@ func TestPowerStateParsing(t *testing.T) {
 		}
 
 		// FormatBatteryLevel
-		result = AnalyzeHistory(ioutil.Discard, test.input, FormatBatteryLevel, emptyUIDPackageMapping, true)
+		result = AnalyzeHistory(io.Discard, test.input, FormatBatteryLevel, emptyUIDPackageMapping, true)
 		validateHistory(test.name, t, result, 0, len(test.wantStatesBL))
 		if len(result.Summaries) != len(test.wantStatesBL) {
 			t.Errorf("%s got incorrect number of battery level summaries. Got %d, want %d", test.name, len(result.Summaries), len(test.wantStatesBL))
@@ -5363,7 +5363,7 @@ func TestReportVersionParsing(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		result := AnalyzeHistory(ioutil.Discard, test.input, FormatTotalTime, emptyUIDPackageMapping, true)
+		result := AnalyzeHistory(io.Discard, test.input, FormatTotalTime, emptyUIDPackageMapping, true)
 		if len(result.Errs) > 0 {
 			t.Errorf("analyzeHistory(%s) generated unexpected errors:\n  %v", test.input, result.Errs)
 		}
@@ -5403,7 +5403,7 @@ func TestMultipleResetsParse(t *testing.T) {
 		TotalDuration: 100 * time.Millisecond,
 		MaxDuration:   100 * time.Millisecond,
 	}
-	result := AnalyzeHistory(ioutil.Discard, input, FormatTotalTime, emptyUIDPackageMapping, true)
+	result := AnalyzeHistory(io.Discard, input, FormatTotalTime, emptyUIDPackageMapping, true)
 	if len(result.Errs) > 0 {
 		t.Errorf("AnalyzeHistory(%s,...).Errs:\n %v\n want nil", input, result.Errs)
 	}

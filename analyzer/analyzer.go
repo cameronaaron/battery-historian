@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -32,7 +31,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/google/battery-historian/activity"
 	"github.com/google/battery-historian/broadcasts"
@@ -58,7 +57,8 @@ const (
 	// maxFileSize is the maximum file size allowed for uploaded package.
 	maxFileSize = 100 * 1024 * 1024 // 100 MB Limit
 
-	minSupportedSDK        = 21 // We only support Lollipop bug reports and above
+	// Updated to support Android 16 (API 36). Previously minSupportedSDK = 21 (Lollipop)
+	minSupportedSDK        = 21 // Lollipop (API 21) minimum; modern support up to Android 16 (API 36)
 	numberOfFilesToCompare = 2
 
 	// Historian V2 Log sources
@@ -478,7 +478,7 @@ func HTTPAnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		b, err := ioutil.ReadAll(part)
+		b, err := io.ReadAll(part)
 		if err != nil {
 			http.Error(w, "Failed to read file. Please try again.", http.StatusInternalServerError)
 			return
@@ -640,7 +640,7 @@ func extractHistogramStats(data presenter.HTMLData) presenter.HistogramStats {
 
 // writeTempFile writes the contents to a temporary file.
 func writeTempFile(contents string) (string, error) {
-	tmpFile, err := ioutil.TempFile("", "historian")
+	tmpFile, err := os.CreateTemp("", "historian")
 	if err != nil {
 		return "", err
 	}

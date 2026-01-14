@@ -15,7 +15,7 @@
 package parseutils
 
 import (
-	"io/ioutil"
+	"io"
 	"reflect"
 	"strings"
 	"testing"
@@ -134,7 +134,7 @@ func TestParseHistory(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		got := AnalyzeHistory(ioutil.Discard, test.input, FormatTotalTime, PackageUIDMapping{}, true)
+		got := AnalyzeHistory(io.Discard, test.input, FormatTotalTime, PackageUIDMapping{}, true)
 
 		if !reflect.DeepEqual(got.TimeToDelta, test.wantTimeToDelta) {
 			t.Errorf("%v AnalyzeHistory(%s).TimeToDelta\n got %v\n expected %v", test.desc, test.input, got.TimeToDelta, test.wantTimeToDelta)

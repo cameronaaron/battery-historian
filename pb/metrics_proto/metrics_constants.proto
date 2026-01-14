@@ -17,7 +17,9 @@
 
 syntax = "proto2";
 
-package metrics;
+package metrics_proto;
+option go_package = "github.com/google/battery-historian/pb/metrics_proto";
+
 
 message MetricsEvent {
 

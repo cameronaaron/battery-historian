@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 	"github.com/google/battery-historian/aggregated"
 	"github.com/google/battery-historian/bugreportutils"
 	"github.com/google/battery-historian/historianutils"

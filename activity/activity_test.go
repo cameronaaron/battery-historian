@@ -22,7 +22,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 	"github.com/google/battery-historian/csv"
 	usagepb "github.com/google/battery-historian/pb/usagestats_proto"
 )

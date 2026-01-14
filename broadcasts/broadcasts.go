@@ -121,10 +121,10 @@ func Parse(f string) (string, []error) {
 	}
 	buf := new(bytes.Buffer)
 	p := parser{
-		lines:    strings.Split(f, "\n"),
-		buf:      buf,
-		csvState: csv.NewState(buf, true),
-		loc:      loc,
+		lines:                    strings.Split(f, "\n"),
+		buf:                      buf,
+		csvState:                 csv.NewState(buf, true),
+		loc:                      loc,
 		historicalBroadcastsUIDs: make(map[string]map[string]string),
 	}
 

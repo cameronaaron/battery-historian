@@ -15,13 +15,13 @@
 // local_checkin_delta parses checkin reports into protos and computes the difference between the two.
 //
 // Example Usage:
-//  ./local_checkin_delta -input=checkin_new.txt,checkin_old.txt
+//
+//	./local_checkin_delta -input=checkin_new.txt,checkin_old.txt
 package main
 
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -29,13 +29,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/google/battery-historian/bugreportutils"
 	"github.com/google/battery-historian/checkindelta"
 	"github.com/google/battery-historian/checkinparse"
 	"github.com/google/battery-historian/checkinutil"
 	bspb "github.com/google/battery-historian/pb/batterystats_proto"
 	sessionpb "github.com/google/battery-historian/pb/session_proto"
+	"google.golang.org/protobuf/proto"
 )
 
 var (
@@ -101,8 +101,8 @@ func printResults(outputProto *bspb.BatteryStats, fileName string, dir string) {
 	if err != nil {
 		log.Fatalf("Cannot marshal output proto: %v", err)
 	}
-	ioutil.WriteFile(fileName+".proto", data, 0600)
-	ioutil.WriteFile(dir+"/"+fileName+".proto", data, 0600)
+	os.WriteFile(fileName+".proto", data, 0600)
+	os.WriteFile(dir+"/"+fileName+".proto", data, 0600)
 }
 
 func main() {
@@ -124,7 +124,7 @@ func main() {
 	var warns []string
 	var ctr checkinutil.IntCounter
 	for i, f := range inputs {
-		c, err := ioutil.ReadFile(f)
+		c, err := os.ReadFile(f)
 		if err != nil {
 			log.Fatalf("Cannot open the file %s: %v", f, err)
 		}
@@ -161,8 +161,8 @@ func main() {
 		}
 
 		if *doDelta {
-			ioutil.WriteFile(*parseFileName+strconv.Itoa(i)+".rawproto", data, 0600)
-			ioutil.WriteFile(dir+"/"+*parseFileName+strconv.Itoa(i)+".rawproto", data, 0600)
+			os.WriteFile(*parseFileName+strconv.Itoa(i)+".rawproto", data, 0600)
+			os.WriteFile(dir+"/"+*parseFileName+strconv.Itoa(i)+".rawproto", data, 0600)
 		}
 
 		if *doComp {
@@ -176,8 +176,8 @@ func main() {
 			if err != nil {
 				log.Fatalf("Cannot marshal normalized input proto: %v", err)
 			}
-			ioutil.WriteFile(*normalizedFileName+strconv.Itoa(i)+".rawproto", normData, 0600)
-			ioutil.WriteFile(dir+"/"+*normalizedFileName+strconv.Itoa(i)+".rawproto", normData, 0600)
+			os.WriteFile(*normalizedFileName+strconv.Itoa(i)+".rawproto", normData, 0600)
+			os.WriteFile(dir+"/"+*normalizedFileName+strconv.Itoa(i)+".rawproto", normData, 0600)
 		}
 	}
 

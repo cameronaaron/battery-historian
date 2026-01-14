@@ -20,7 +20,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path"
@@ -32,7 +31,8 @@ import (
 )
 
 const (
-	closureCompilerVersion = "20170409"
+	// Updated to the latest closure compiler version supporting modern JavaScript
+	closureCompilerVersion = "20230502"
 	closureCompilerZip     = "compiler-" + closureCompilerVersion + ".zip"
 	closureCompilerJar     = "closure-compiler-v" + closureCompilerVersion + ".jar"
 	closureCompilerURL     = "http://dl.google.com/closure-compiler/" + closureCompilerZip
@@ -134,7 +134,7 @@ func main() {
 		}
 		defer resp.Body.Close()
 
-		contents, err := ioutil.ReadAll(resp.Body)
+		contents, err := io.ReadAll(resp.Body)
 		if err != nil {
 			fmt.Printf("Couldn't get zip contents: %v\n", err)
 			return
@@ -190,5 +190,7 @@ func main() {
 		"--js_output_file", path.Join(wd, compiledDir, "historian-optimized.js"),
 		"--output_manifest", path.Join(wd, compiledDir, "manifest.MF"),
 		"--compilation_level", "SIMPLE_OPTIMIZATIONS",
+		"--language_in", "ECMASCRIPT_2020", // Support modern JavaScript
+		"--language_out", "ECMASCRIPT5", // Target broad compatibility
 	)
 }

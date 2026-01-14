@@ -16,7 +16,9 @@
 // Protocol buffer containing information about installed packages.
 
 syntax = "proto2";
-package usagestats;
+package usagestats_proto;
+option go_package = "github.com/google/battery-historian/pb/usagestats_proto";
+
 
 message PackageInfo {
   // Apps / service name. (e.g. com.google.android.apps.books)

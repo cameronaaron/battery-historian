@@ -23,7 +23,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 	"github.com/google/battery-historian/checkinparse"
 	"github.com/google/battery-historian/packageutils"
 

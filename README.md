@@ -2,6 +2,8 @@
 
 Battery Historian is a tool to inspect battery related information and events on an Android device running Android 5.0 Lollipop (API level 21) and later, while the device was not plugged in. It allows application developers to visualize system and application level events on a timeline with panning and zooming functionality, easily see various aggregated statistics since the device was last fully charged, and select an application and inspect the metrics that impact battery specific to the chosen application. It also allows an A/B comparison of two bugreports, highlighting differences in key battery related metrics.
 
+**Latest Updates (2026)**: Now supports modern Android 16 (API 36) bugreports with Battery History Format 2, enhanced battery health metrics, and rail-based power measurement data.
+
 ## Getting Started
 
 #### Using Docker
@@ -12,7 +14,7 @@ Run the Battery Historian image. Choose a port number and replace `<port>` with
 that number in the commands below:
 
 ```
-docker -- run -p <port>:9999 gcr.io/android-battery-historian/stable:3.0 --port 9999
+docker run -p <port>:9999 gcr.io/android-battery-historian/stable:3.0 --port 9999
 ```
 
 For Linux and Mac OS X:
@@ -34,9 +36,9 @@ documentation](<https://docs.docker.com/engine/reference/run/#/expose-incoming-p
 
 #### Building from source code
 
-Make sure you have at least Golang version 1.8.1:
+**Requirements**: Go 1.25+, Python 3.7+, and Java 11+
 
-* Follow the instructions available at <http://golang.org/doc/install> for downloading and installing the Go compilers, tools, and libraries.
+* Follow the instructions available at <http://golang.org/doc/install> for downloading and installing the Go compilers, tools, and libraries (version 1.25 or later).
 * Create a workspace directory according to the instructions at
   <http://golang.org/doc/code.html#Organization>.
 * Ensure that `GOPATH` and `GOBIN` environment variables are appropriately set and added to your `$PATH`
@@ -55,10 +57,9 @@ Make sure you have at least Golang version 1.8.1:
 
 Next, install Git from <https://git-scm.com/downloads> if it's not already installed.
 
-Next, make sure Python 2.7 (NOT Python 3!) is installed. See <https://python.org/downloads>
-if it isn't, and ensure that python is added to your `$PATH` environment variable.
+**Note**: Python 3.7+ is now required (previously Python 2.7).
 
-Next, install Java from <http://www.oracle.com/technetwork/java/javase/downloads/index.html>.
+Next, install Java 11 or later from <https://adoptium.net/> or <https://www.oracle.com/java/technologies/downloads/>.
 
 Next, download the Battery Historian code and its dependencies:
 
@@ -71,7 +72,7 @@ Finally, run Battery Historian!
 ```
 $ cd $GOPATH/src/github.com/google/battery-historian
 
-# Compile Javascript files using the Closure compiler
+# Compile Javascript files using the Closure compiler (modern version supporting ES6+)
 $ go run setup.go
 
 # Run Historian on your machine (make sure $PATH contains $GOBIN)
@@ -90,14 +91,13 @@ go run cmd/battery-historian/battery-historian.go [--port <default:9999>]
 
 To take a bug report from your Android device, you will need to enable USB debugging under `Settings > System > Developer Options`. On Android 4.2 and higher, the Developer options screen is hidden by default. You can enable this by following the instructions [here](<http://developer.android.com/tools/help/adb.html#Enabling>).
 
-To obtain a bug report from your development device running Android 7.0 and
-higher:
+To obtain a bug report from your development device running Android 12 and higher (recommended):
 
 ```
 $ adb bugreport bugreport.zip
 ```
 
-For devices 6.0 and lower:
+For devices running Android 7.0 to 11:
 
 ```
 $ adb bugreport > bugreport.txt

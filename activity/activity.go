@@ -78,6 +78,9 @@ const (
 	// lowMemoryEvent is the string for matching low memory events in the bug report.
 	lowMemoryEvent = "am_low_memory"
 
+	// focusedActivityEvent is the string for matching focused activity events in the bug report.
+	focusedActivityEvent = "am_focused_activity"
+
 	// lowMemoryANRGroup is the group name for low memory and application not responding events.
 	lowMemoryANRGroup = "AM Low Memory / ANR"
 
@@ -349,8 +352,10 @@ func (p *parser) printPartial() {
 
 // parseEvent parses a single event from the log data, and returns any warning or error.
 // Logcat lines are of the form:
-//   timestamp PID TID log-level log-tag: tag-values.
-//   (from: https://source.android.com/source/read-bug-reports.html)
+//
+//	timestamp PID TID log-level log-tag: tag-values.
+//	(from: https://source.android.com/source/read-bug-reports.html)
+//
 // The event variable contains the log-tag and the details variable contains the tag-values.
 func (p *parser) parseEvent(pkgs []*usagepb.PackageInfo, timestamp int64, event, details, pid string) (string, error) {
 	// Reset the saved event state if we've moved on to a new event type.
@@ -423,6 +428,54 @@ func (p *parser) parseEvent(pkgs []*usagepb.PackageInfo, timestamp int64, event,
 			})
 			return "", nil
 		}
+	case "ActivityManager":
+		// Detect ANR CPU usage reporting
+		if strings.Contains(details, "ANR in") {
+			// Extract app name from "ANR in <package>"
+			if parts := strings.Fields(details); len(parts) >= 3 {
+				pkgName := parts[2]
+				uid, err := procToUID(pkgName, pkgs)
+				p.csvState.PrintInstantEvent(csv.Entry{
+					Desc:  "ANR Detected",
+					Start: timestamp,
+					Type:  "service",
+					Value: details,
+					Opt:   uid,
+				})
+				return "", err
+			}
+		}
+		// Detect broadcast queue issues
+		if strings.Contains(details, "Broadcast of Intent") && strings.Contains(details, "took") {
+			p.csvState.PrintInstantEvent(csv.Entry{
+				Desc:  "Slow Broadcast",
+				Start: timestamp,
+				Type:  "service",
+				Value: details,
+			})
+			return "", nil
+		}
+		// Detect process killing due to low memory
+		if strings.Contains(details, "Killing") && strings.Contains(details, "adj") {
+			p.csvState.PrintInstantEvent(csv.Entry{
+				Desc:  "Process Killed (Low Memory)",
+				Start: timestamp,
+				Type:  "service",
+				Value: details,
+			})
+			return "", nil
+		}
+		// Detect watchdog issues
+		if strings.Contains(details, "WATCHDOG") {
+			p.csvState.PrintInstantEvent(csv.Entry{
+				Desc:  "System Watchdog",
+				Start: timestamp,
+				Type:  "service",
+				Value: details,
+			})
+			return "", nil
+		}
+		return "", nil
 	case "BluetoothAdapter":
 		if strings.Contains(details, "startLeScan()") {
 			appName, uid := p.pidInfo(pid)
@@ -431,6 +484,29 @@ func (p *parser) parseEvent(pkgs []*usagepb.PackageInfo, timestamp int64, event,
 				Start: timestamp,
 				Type:  "service",
 				Value: fmt.Sprintf("%s (PID: %s)", appName, pid),
+				Opt:   uid,
+			})
+		}
+		if strings.Contains(details, "stopLeScan()") {
+			appName, uid := p.pidInfo(pid)
+			p.csvState.PrintInstantEvent(csv.Entry{
+				Desc:  "Bluetooth Scan Stopped",
+				Start: timestamp,
+				Type:  "service",
+				Value: fmt.Sprintf("%s (PID: %s)", appName, pid),
+				Opt:   uid,
+			})
+		}
+		return "", nil
+	case "BluetoothLeScanner":
+		// Android 7.0+ BLE scan tracking
+		if strings.Contains(details, "onClientRegistered()") {
+			appName, uid := p.pidInfo(pid)
+			p.csvState.PrintInstantEvent(csv.Entry{
+				Desc:  "BLE Scanner Registered",
+				Start: timestamp,
+				Type:  "service",
+				Value: fmt.Sprintf("%s (PID: %s) - %s", appName, pid, details),
 				Opt:   uid,
 			})
 		}
@@ -518,6 +594,28 @@ func (p *parser) parseEvent(pkgs []*usagepb.PackageInfo, timestamp int64, event,
 			Type:  "service",
 			Value: details, // The value is the number of processes.
 		})
+		return "", nil
+	case focusedActivityEvent:
+		details = strings.Trim(details, "[]")
+		// Expected format: User,Component
+		// e.g. [0,com.google.android.GoogleCamera/com.android.camera.CameraActivity]
+		parts := strings.Split(details, ",")
+		if len(parts) >= 2 {
+			component := parts[1]
+			// Extract package name from component
+			if idx := strings.Index(component, "/"); idx > 0 {
+				pkgName := component[:idx]
+				uid, err := procToUID(pkgName, pkgs)
+				p.csvState.PrintInstantEvent(csv.Entry{
+					Desc:  "Focused Activity",
+					Start: timestamp,
+					Type:  "service",
+					Value: component,
+					Opt:   uid,
+				})
+				return "", err
+			}
+		}
 		return "", nil
 	case anrEvent:
 		details = strings.Trim(details, "[]")

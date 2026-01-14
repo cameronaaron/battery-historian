@@ -22,17 +22,17 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
+	"os"
 	"strings"
 	"time"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/google/battery-historian/bugreportutils"
 	"github.com/google/battery-historian/checkinparse"
 	"github.com/google/battery-historian/checkinutil"
 	"github.com/google/battery-historian/packageutils"
 	sessionpb "github.com/google/battery-historian/pb/session_proto"
+	"google.golang.org/protobuf/proto"
 )
 
 var (
@@ -50,7 +50,7 @@ func min(x, y int) int {
 func main() {
 	flag.Parse()
 
-	c, err := ioutil.ReadFile(*inputFile)
+	c, err := os.ReadFile(*inputFile)
 	if err != nil {
 		log.Fatalf("Cannot open the file %s: %v", *inputFile, err)
 	}
@@ -85,9 +85,9 @@ func main() {
 	if len(errs) > 0 {
 		log.Fatalf("Could not parse battery stats: %v\n", errs)
 	}
-	fmt.Println("\n################\n")
+	fmt.Println("\n################")
 	fmt.Println("Partial Wakelocks")
-	fmt.Println("################\n")
+	fmt.Println("################")
 	var pwl []*checkinparse.WakelockInfo
 	for _, app := range stats.App {
 		for _, pw := range app.Wakelock {
@@ -109,7 +109,7 @@ func main() {
 
 	fmt.Println("\n################")
 	fmt.Println("Kernel Wakelocks")
-	fmt.Println("################\n")
+	fmt.Println("################")
 	var kwl []*checkinparse.WakelockInfo
 	for _, kw := range stats.System.KernelWakelock {
 		if kw.GetName() != "PowerManagerService.WakeLocks" && kw.GetTimeMsec() > 0 {
@@ -128,5 +128,5 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error from proto.Marshal: %v", err)
 	}
-	ioutil.WriteFile(*outputFile, data, 0600)
+	os.WriteFile(*outputFile, data, 0600)
 }

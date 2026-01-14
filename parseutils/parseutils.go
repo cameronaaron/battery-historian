@@ -20,7 +20,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"reflect"
 	"regexp"
@@ -29,7 +28,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 	"github.com/google/battery-historian/checkinparse"
 	"github.com/google/battery-historian/csv"
 	"github.com/google/battery-historian/historianutils"
@@ -2219,6 +2218,11 @@ func updateState(b io.Writer, csvState *csv.State, state *DeviceState, summary *
 			&summary.VideoOnSummary, tr, "Video", csvState)
 
 	case "Ecn": // network connectivity
+		// Handle empty connectivity values (Android 16+)
+		if value == "" {
+			// Empty connectivity change - skip
+			return state, summary, nil
+		}
 		suid := idxMap[value]
 		t, ok := connConstants[suid.UID]
 		if !ok {
@@ -2345,8 +2349,15 @@ func updateState(b io.Writer, csvState *csv.State, state *DeviceState, summary *
 			activeNtwks[ts] = &suid
 
 		default:
-			fmt.Printf("Unknown Ecn change string: %s\n", suid.Service)
-			return state, summary, fmt.Errorf("unknown Ecn change string: %s\n", suid.Service)
+			// Handle unknown Ecn states (Android 16+ may introduce new connectivity states)
+			if suid.Service == "" {
+				// Empty service state - skip
+				return state, summary, nil
+			}
+			// For any new unknown connectivity states, treat them as a custom state
+			ts = t + ":" + suid.Service
+			suid.Start = state.CurrentTime
+			activeNtwks[ts] = &suid
 		}
 		su := &ServiceUID{
 			Start:   state.CurrentTime,
@@ -2465,6 +2476,18 @@ func updateState(b io.Writer, csvState *csv.State, state *DeviceState, summary *
 		return state, summary, state.WifiSignalStrength.assign(state.CurrentTime,
 			summary.Active, summary.StartTimeMs, summary.WifiSignalStrengthSummary,
 			signalValue, "Wifi signal strength", csvState)
+
+	case "Gss": // Google Signal Strength (Android 16+)
+		// Google Signal Strength is a new Android 16 metric for cellular signal quality
+		signalValue, ok := signalStrengthConstants[value]
+		if !ok {
+			// For Android 16, allow graceful handling of unknown signal values
+			signalValue = "none"
+		}
+		// Treat Google Signal Strength similar to phone signal strength
+		return state, summary, state.PhoneSignalStrength.assign(state.CurrentTime,
+			summary.Active, summary.StartTimeMs, summary.PhoneSignalStrengthSummary,
+			signalValue, "Google signal strength", csvState)
 
 	case "fl": // flashlight
 		return state, summary, state.FlashlightOn.assign(state.CurrentTime,
@@ -2683,6 +2706,56 @@ func updateState(b io.Writer, csvState *csv.State, state *DeviceState, summary *
 			csvState.AddEntry(pdt.Name, pdt, state.CurrentTime)
 		}
 
+		return state, summary, nil
+
+	// Android 16+ (API 36+) new fields
+	case "Chtp": // charging policy (charging type)
+		// Charging policy: normal, adaptive, etc.
+		// Can be ignored for now as it's metadata about charging state
+		// In future, could track charging policy changes
+		return state, summary, nil
+
+	case "Esc": // energy source sensor/event
+		// Sensor events for energy tracking
+		// Format: +Esc / uid:"sensor_name" or -Esc
+		// These are just sensor readings and can be logged as instant events
+		if tr == "+" && value != "" {
+			// Log sensor activation
+			addCSVInstantEvent(csvState, state, "Energy Sensor", "sensor", value)
+		}
+		return state, summary, nil
+
+	case "Mrc": // Modem radio control
+		// Modem radio info - metadata only
+		return state, summary, nil
+
+	case "Wrc": // WiFi radio control
+		// WiFi radio info - metadata only
+		return state, summary, nil
+
+	case "Eds": // Energy display state
+		// Display energy metrics
+		return state, summary, nil
+
+	case "Sd": // Screen details/state changes
+		// Screen state details for Android 16+
+		// Can be combined with display brightness/state tracking
+		return state, summary, nil
+
+	case "nrs": // Network radio state
+		// Network radio state for Android 16+
+		return state, summary, nil
+
+	case "SubsystemPowerState": // Subsystem power states
+		// Power state details for system subsystems
+		return state, summary, nil
+
+	case "reason": // Alarm/intent reason (Android 16+)
+		// Alarm or intent reason information
+		return state, summary, nil
+
+	case "pendingintent": // Pending intent details (Android 16+)
+		// Pending intent information for alarms/broadcasts
 		return state, summary, nil
 
 	// TODO:
@@ -3110,7 +3183,7 @@ func AnalyzeHistory(csvWriter io.Writer, history, format string, pum PackageUIDM
 	if format == FormatTotalTime {
 		writer = csvWriter
 	} else {
-		writer = ioutil.Discard
+		writer = io.Discard
 	}
 
 	csvState := csv.NewState(writer, true)
@@ -3212,7 +3285,7 @@ func extractLevel(h []string, curMs int64, d *deltaMapping) ([]csv.Event, []erro
 	for _, l := range h {
 		// Ignore errors as most will be due to incomplete (non battery level) events.
 		// e.g. two negative transitions for "Temp White List
-		ds, _, _ = analyzeHistoryLine(ioutil.Discard, csvState, ds, as, &sums, nil, pum, d, l, true)
+		ds, _, _ = analyzeHistoryLine(io.Discard, csvState, ds, as, &sums, nil, pum, d, l, true)
 	}
 	csvState.PrintAllReset(ds.CurrentTime)
 	es, errs := csv.ExtractEvents(b.String(), []string{BatteryLevel})

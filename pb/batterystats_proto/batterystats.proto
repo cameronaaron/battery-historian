@@ -18,9 +18,11 @@
 
 syntax = "proto2";
 
-package batterystats;
+package batterystats_proto;
+option go_package = "github.com/google/battery-historian/pb/batterystats_proto";
 
-import "github.com/google/battery-historian/pb/build_proto/build.proto";
+
+import "pb/build_proto/build.proto";
 
 message BatteryStats {
   // Unique ID for the record. Concatenation of end_time_usec, shard, and the index in the shard.
@@ -48,7 +50,7 @@ message BatteryStats {
   // True if it's user/release-keys.
   optional bool is_user_release = 12;
   // Info from the build fingerprint.
-  optional build.Build build = 13;
+  optional build_proto.Build build = 13;
   // Android SDK version.
   optional int32 sdk_version = 14;
   // GMS Core version.

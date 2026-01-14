@@ -18,10 +18,12 @@
 
 syntax = "proto2";
 
-package session;
+package session_proto;
+option go_package = "github.com/google/battery-historian/pb/session_proto";
 
-import "github.com/google/battery-historian/pb/usagestats_proto/android_battery_usage.proto";
-import "github.com/google/battery-historian/pb/usagestats_proto/android_package_info.proto";
+
+import "pb/usagestats_proto/android_battery_usage.proto";
+import "pb/usagestats_proto/android_package_info.proto";
 
 // Aggregated checkin stats that we will use to compute deltas.
 message Checkin {
@@ -43,14 +45,14 @@ message Checkin {
   optional string checkin = 6;
 
   // Installed packages
-  repeated usagestats.PackageInfo packages = 7;
+  repeated usagestats_proto.PackageInfo packages = 7;
 
   // Checkin/OTA groups for the device
   //    e.g. auto.droidfood, auto.googlefood.lmp
   repeated string groups = 10;
 
   // System info uploaded directly from the device.
-  optional usagestats.SystemInfo system_info = 8;
+  optional usagestats_proto.SystemInfo system_info = 8;
 
   // Next tag = 9 (skip 10)
 }

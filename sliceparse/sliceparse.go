@@ -24,9 +24,10 @@ import (
 // Consume parses len(output) elements of input into their respective output
 // variables.  Each output must be a pointer to a supported type.  What is
 // stored to the output depends on its type:
-//    *string: input[i] is directly copied
-//    *int32: strconv.ParseInt(input[i], 10, 32) is called
-//    *int64: strconv.ParseInt(input[i], 10, 64) is called
+//
+//	*string: input[i] is directly copied
+//	*int32: strconv.ParseInt(input[i], 10, 32) is called
+//	*int64: strconv.ParseInt(input[i], 10, 64) is called
 //
 // If an output element is a nil interface{}, the associated input element is
 // skipped.  A nil pointer value is also accepted - in that case the input
